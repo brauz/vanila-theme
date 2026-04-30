@@ -30,6 +30,15 @@ Supported variables
       assign recipient_feature_active = true
       assign show_payment_button = false
     endif
+
+    # Products tagged "Booking Item" are appointments, not purchasable goods —
+    # swap the cart flow for a link to the booking page and suppress checkout.
+    assign is_booking_item = false
+    assign tags_lower = product.tags | join: ',' | downcase
+    if tags_lower contains 'booking item'
+      assign is_booking_item = true
+      assign show_payment_button = false
+    endif
   -%}
 
   <product-form>
@@ -84,58 +93,62 @@ Supported variables
         <div class="v-stack gap-2">
           <buy-buttons class="buy-buttons {% if show_payment_button %}buy-buttons--has-dynamic{% endif %}" form="{{ form_id }}">
             <div class="v-stack gap-2">
-              {%- if product.available and show_quantity_selector -%}
-                {%- liquid
-                  assign variant = product.selected_or_first_available_variant
-                  assign quantity_rules = ''
-
-                  if variant.quantity_rule.min > 1
-                    assign rule = 'product.quantity.minimum_of' | t: min: variant.quantity_rule.min
-                    assign quantity_rules = quantity_rules | append: ' / ' | append: rule
-                  endif
-
-                  if variant.quantity_rule.max != nil
-                    assign rule = 'product.quantity.maximum_of' | t: max: variant.quantity_rule.max
-                    assign quantity_rules = quantity_rules | append: ' / ' | append: rule
-                  endif
-
-                  if variant.quantity_rule.increment > 1
-                    assign rule = 'product.quantity.increment_of' | t: step: variant.quantity_rule.increment
-                    assign quantity_rules = quantity_rules | append: ' / ' | append: rule
-                  endif
-                -%}
-
-                {%- if quantity_rules != blank -%}
-                  <p class="text-subdued text-sm">{{ quantity_rules | remove_first: ' / ' | capitalize }}</p>
-                {%- endif -%}
-              {%- endif -%}
-
-              <div class="h-stack {% if add_quantity_selector_spacing or settings.button_border_radius > 0 %}gap-2{% else %}collapse-quantity-selector{% endif %}">
+              {%- if is_booking_item -%}
+                {%- render 'button', content: 'Book An Appointment', href: '/pages/booking', style: atc_button_style, background: atc_button_background, text_color: atc_button_text_color, stretch: true -%}
+              {%- else -%}
                 {%- if product.available and show_quantity_selector -%}
-                  {%- render 'quantity-selector', variant: product.selected_or_first_available_variant, form: form_id -%}
+                  {%- liquid
+                    assign variant = product.selected_or_first_available_variant
+                    assign quantity_rules = ''
+
+                    if variant.quantity_rule.min > 1
+                      assign rule = 'product.quantity.minimum_of' | t: min: variant.quantity_rule.min
+                      assign quantity_rules = quantity_rules | append: ' / ' | append: rule
+                    endif
+
+                    if variant.quantity_rule.max != nil
+                      assign rule = 'product.quantity.maximum_of' | t: max: variant.quantity_rule.max
+                      assign quantity_rules = quantity_rules | append: ' / ' | append: rule
+                    endif
+
+                    if variant.quantity_rule.increment > 1
+                      assign rule = 'product.quantity.increment_of' | t: step: variant.quantity_rule.increment
+                      assign quantity_rules = quantity_rules | append: ' / ' | append: rule
+                    endif
+                  -%}
+
+                  {%- if quantity_rules != blank -%}
+                    <p class="text-subdued text-sm">{{ quantity_rules | remove_first: ' / ' | capitalize }}</p>
+                  {%- endif -%}
                 {%- endif -%}
 
-                {%- render 'button', content: button_content, type: 'submit', disabled: button_disabled, secondary: show_payment_button, style: atc_button_style, background: atc_button_background, text_color: atc_button_text_color, stretch: true -%}
-              </div>
+                <div class="h-stack {% if add_quantity_selector_spacing or settings.button_border_radius > 0 %}gap-2{% else %}collapse-quantity-selector{% endif %}">
+                  {%- if product.available and show_quantity_selector -%}
+                    {%- render 'quantity-selector', variant: product.selected_or_first_available_variant, form: form_id -%}
+                  {%- endif -%}
 
-              {%- if show_payment_button -%}
-                {{- form | payment_button -}}
+                  {%- render 'button', content: button_content, type: 'submit', disabled: button_disabled, secondary: show_payment_button, style: atc_button_style, background: atc_button_background, text_color: atc_button_text_color, stretch: true -%}
+                </div>
 
-                <style>
-                  #{{ form_id }} .shopify-payment-button__button {
-                    {%- if payment_button_background != blank and payment_button_background != 'rgba(0,0,0,0)' -%}
-                      --button-background: {{ payment_button_background.rgb }};
-                    {%- endif -%}
+                {%- if show_payment_button -%}
+                  {{- form | payment_button -}}
 
-                    {%- if payment_button_text_color != blank and payment_button_text_color != 'rgba(0,0,0,0)' -%}
-                      --button-text-color: {{ payment_button_text_color.rgb }};
-                    {%- endif -%}
+                  <style>
+                    #{{ form_id }} .shopify-payment-button__button {
+                      {%- if payment_button_background != blank and payment_button_background != 'rgba(0,0,0,0)' -%}
+                        --button-background: {{ payment_button_background.rgb }};
+                      {%- endif -%}
 
-                    {%- unless product.selected_or_first_available_variant.available -%}
-                      display: none;
-                    {%- endunless -%}
-                  }
-                </style>
+                      {%- if payment_button_text_color != blank and payment_button_text_color != 'rgba(0,0,0,0)' -%}
+                        --button-text-color: {{ payment_button_text_color.rgb }};
+                      {%- endif -%}
+
+                      {%- unless product.selected_or_first_available_variant.available -%}
+                        display: none;
+                      {%- endunless -%}
+                    }
+                  </style>
+                {%- endif -%}
               {%- endif -%}
             </div>
           </buy-buttons>
@@ -154,6 +167,8 @@ Supported variables
   assign product_price = product.selected_or_first_available_variant.price | divided_by: 100.0
   assign product_price_cents = product.selected_or_first_available_variant.price
 -%}
+{%- comment -%} Booking items have no price to finance — skip installment widgets. {%- endcomment -%}
+{%- unless is_booking_item -%}
 <div class="payment-widgets">
   <div class="payment-widgets__item payment-widgets__item--afterpay ">
     <square-placement 
@@ -204,6 +219,7 @@ Supported variables
     </quadpay-widget>
   </div>
 </div>
+{%- endunless -%}
 <script>
   document.addEventListener('DOMContentLoaded', function () {
     document.addEventListener('change', function (e) {
